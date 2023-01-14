@@ -35,22 +35,22 @@ cts.Cancel();
 
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
+    #region TextMessage
     if (update.Type == UpdateType.Message && update.Message.Type == MessageType.Text)
     {
-        var message = update.Message;
-        var chatId = message.Chat.Id;
-        var messageText = message.Text.ToUpper();
-        var firstName = message.From.FirstName;
+        var chatId = update.Message.Chat.Id;
+        var messageText = update.Message.Text.ToUpper();
+        var firstName = update.Message.From.FirstName;
         countries = parser.GetCountries();
         Console.WriteLine(chatId + " " + firstName + ": " + messageText);
 
         if (messageText == "/START")
         {
-            Message sentMessage = await botClient.SendTextMessageAsync(chatId, $"Select a destination country:\r\n/{String.Join("\r\n/", countries)}", cancellationToken: cancellationToken);
+            await botClient.SendTextMessageAsync(chatId, $"Select a destination country:\r\n/{String.Join("\r\n/", countries)}", cancellationToken: cancellationToken);
         }
         else if (messageText == "/LINK")
         {
-            Message sentMessage = await botClient.SendTextMessageAsync(chatId, "https://koronapay.com/transfers/online", cancellationToken: cancellationToken);
+            await botClient.SendTextMessageAsync(chatId, "https://koronapay.com/transfers/online", cancellationToken: cancellationToken);
         }
         else if (countries.Any(str => "/" + str == messageText))
         {
@@ -63,12 +63,15 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             InlineKeyboardMarkup currencyKeyboard = new(new[]{currencyKeys});
 
-            Message sentMessage = await botClient.SendTextMessageAsync(chatId, $"Destination country: {messageText} \r\nSelect a currency:", replyMarkup: currencyKeyboard, cancellationToken: cancellationToken);
+            await botClient.SendTextMessageAsync(chatId, $"Destination country: {messageText} \r\nSelect a currency:", replyMarkup: currencyKeyboard, cancellationToken: cancellationToken);
         }
     }
+    #endregion
 
+    #region CallbackQuery
     if (update.Type == UpdateType.CallbackQuery)
     {
+        var chatId = update.CallbackQuery.Message.Chat.Id;
         if (update.CallbackQuery.Data == "Update")
         {
             var entityValues = update.CallbackQuery.Message.EntityValues.ToArray();
@@ -78,23 +81,23 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             {
                 parser.Parse(country, currency);
                 string parsedInfo = CombineParsedInfo(country, currency);
-                Message editMessage = await botClient.EditMessageTextAsync(update.CallbackQuery.Message.Chat.Id,
-                                                                           update.CallbackQuery.Message.MessageId,
-                                                                           text: parsedInfo,
-                                                                           parseMode: ParseMode.MarkdownV2,
-                                                                           replyMarkup: terminalKeyboard,
-                                                                           cancellationToken: cancellationToken);
+                await botClient.EditMessageTextAsync(chatId: chatId,
+                                                     update.CallbackQuery.Message.MessageId,
+                                                     text: parsedInfo,
+                                                     parseMode: ParseMode.MarkdownV2,
+                                                     replyMarkup: terminalKeyboard,
+                                                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                Message sentMessage = await botClient.SendTextMessageAsync(update.CallbackQuery.Message.Chat.Id, "Bad request", cancellationToken: cancellationToken);
+                await botClient.SendTextMessageAsync(chatId, "Bad request", cancellationToken: cancellationToken);
             }
         }
         else if (update.CallbackQuery.Data == "Return")
         {
             countries = parser.GetCountries();
-            Message sentMessage = await botClient.SendTextMessageAsync(update.CallbackQuery.Message.Chat.Id, $"Select a destination country:\r\n/{String.Join("\r\n/", countries)}", cancellationToken: cancellationToken);
+            await botClient.SendTextMessageAsync(chatId, $"Select a destination country:\r\n/{String.Join("\r\n/", countries)}", cancellationToken: cancellationToken);
         }
         else 
         {
@@ -105,19 +108,20 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             {
                 parser.Parse(country, currency);
                 string parsedInfo = CombineParsedInfo(country, currency);
-                Message sentMessage = await botClient.SendTextMessageAsync(update.CallbackQuery.Message.Chat.Id,
-                                                                           text: parsedInfo,
-                                                                           parseMode: ParseMode.MarkdownV2,
-                                                                           replyMarkup: terminalKeyboard,
-                                                                           cancellationToken: cancellationToken);
+                await botClient.SendTextMessageAsync(chatId: chatId,
+                                                     text: parsedInfo,
+                                                     parseMode: ParseMode.MarkdownV2,
+                                                     replyMarkup: terminalKeyboard,
+                                                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                Message sentMessage = await botClient.SendTextMessageAsync(update.CallbackQuery.Message.Chat.Id, "Bad request", cancellationToken: cancellationToken);
+                await botClient.SendTextMessageAsync(chatId, "Bad request", cancellationToken: cancellationToken);
             }
         }
     }
+    #endregion
 }
 
 Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
@@ -143,4 +147,5 @@ string CombineParsedInfo(string country, string currency)
            $"Transfer amount: {parser.GetReceivingAmount()} {parser.GetReceivingCurrency()}\r\n" +
            $"Total transfer amount: {parser.GetSendingAmount()} {parser.GetSendingCurrency()}\r\n";
 }
+
  
