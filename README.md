@@ -6,6 +6,8 @@
 
 Telegram bot for parsing the exchange rate from the KoronaPay service.
 
+https://t.me/KoronaPayParser_bot
+
 ![Chat](https://cdn.discordapp.com/attachments/828381311831375914/1063820437462732800/kpb.PNG)
 
 Replace ```YOUR_TOKEN``` with BotFather's bot token to connect your own bot:
