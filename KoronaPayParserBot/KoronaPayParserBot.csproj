@@ -14,9 +14,9 @@
 
   <ItemGroup>
     <Reference Include="KoronaPayParserLib">
-      <HintPath>bin\Debug\net6.0\KoronaPayParserLib.dll</HintPath>
-      <Private>True</Private>
+      <HintPath>KoronaPayParserLib.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
 

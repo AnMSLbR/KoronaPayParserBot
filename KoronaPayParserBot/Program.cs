@@ -1,4 +1,5 @@
-﻿using KoronaPayParserLib;
+﻿using KoronaPayParserBot;
+using KoronaPayParserLib;
 using Microsoft.VisualBasic;
 using System.Diagnostics.Metrics;
 using System.Net.Http.Headers;
@@ -11,13 +12,18 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 string accessToken = "YOUR_TOKEN";
 var parser = new KoronaPayParser();
+Dictionary<long, UserRequest> requests = new Dictionary<long, UserRequest>();
 List<string> countries;
 var botClient = new TelegramBotClient(accessToken);
 using CancellationTokenSource cts = new();
 
 ReceiverOptions receiverOptions = new()
 {
-    AllowedUpdates = Array.Empty<UpdateType>()
+    AllowedUpdates = new UpdateType[]
+    {
+        UpdateType.Message,
+        UpdateType.CallbackQuery,
+    }
 };
 
 InlineKeyboardMarkup terminalKeyboard = new(new[]
@@ -54,7 +60,15 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         }
         else if (countries.Any(str => "/" + str == messageText))
         {
-            var currencies = parser.GetCurrencies(messageText.Substring(1));
+            if (requests.ContainsKey(chatId))
+            {
+                requests[chatId].Country = messageText;
+            }
+            else
+            {
+                requests.Add(chatId, new UserRequest() { Country = messageText });
+            }
+            var currencies = parser.GetCurrencies(requests[chatId].Country.Substring(1));
 
             InlineKeyboardButton[] currencyKeys = new InlineKeyboardButton[currencies.Count];
             for (int i = 0; i < currencies.Count; i++)
@@ -63,7 +77,30 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             InlineKeyboardMarkup currencyKeyboard = new(new[]{currencyKeys});
 
-            await botClient.SendTextMessageAsync(chatId, $"Destination country: {messageText} \r\nSelect a currency:", replyMarkup: currencyKeyboard, cancellationToken: cancellationToken);
+            await botClient.SendTextMessageAsync(chatId, $"Destination country: {requests[chatId].Country} \r\nSelect a currency:", replyMarkup: currencyKeyboard, cancellationToken: cancellationToken);
+        }
+        else if (requests.ContainsKey(chatId) && requests[chatId].Currency != null)
+        {
+            try
+            {
+                requests[chatId].Amount = messageText;
+                parser.Parse(requests[chatId].Country, requests[chatId].Currency, requests[chatId].Amount);
+                string parsedInfo = CombineParsedInfo(requests[chatId].Country, requests[chatId].Currency);
+                await botClient.SendTextMessageAsync(chatId: chatId,
+                                                     text: parsedInfo,
+                                                     parseMode: ParseMode.MarkdownV2,
+                                                     replyMarkup: terminalKeyboard,
+                                                     cancellationToken: cancellationToken);
+                if (requests.ContainsKey(chatId))
+                {
+                    requests.Remove(chatId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                await botClient.SendTextMessageAsync(chatId, "Bad request", cancellationToken: cancellationToken);
+            }
         }
     }
     #endregion
@@ -77,9 +114,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             var entityValues = update.CallbackQuery.Message.EntityValues.ToArray();
             var country = entityValues[0].Substring(1);
             var currency = entityValues[1];
+            var amount = entityValues[2].Split(',')[0];
             try
             {
-                parser.Parse(country, currency);
+                parser.Parse(country, currency, amount);
                 string parsedInfo = CombineParsedInfo(country, currency);
                 await botClient.EditMessageTextAsync(chatId: chatId,
                                                      update.CallbackQuery.Message.MessageId,
@@ -102,23 +140,20 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         else 
         {
             var callbackData = update.CallbackQuery.Data.Split('/');
-            var currency = callbackData[0];
-            var country = callbackData[1];
-            try
+            if (requests.ContainsKey(chatId))
             {
-                parser.Parse(country, currency);
-                string parsedInfo = CombineParsedInfo(country, currency);
-                await botClient.SendTextMessageAsync(chatId: chatId,
-                                                     text: parsedInfo,
-                                                     parseMode: ParseMode.MarkdownV2,
-                                                     replyMarkup: terminalKeyboard,
-                                                     cancellationToken: cancellationToken);
+                requests[chatId].Currency = callbackData[0];
+                requests[chatId].Country = callbackData[1];
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine(ex.Message);
-                await botClient.SendTextMessageAsync(chatId, "Bad request", cancellationToken: cancellationToken);
+                requests.Add(chatId, new UserRequest() { Currency = callbackData[0], Country = callbackData[1] });
             }
+
+            await botClient.SendTextMessageAsync(chatId,
+                                                 $"Destination country: /{requests[chatId].Country}\r\nSelected currency: __{requests[chatId].Currency}__\r\nEnter the transfer amount:",
+                                                 parseMode: ParseMode.MarkdownV2,
+                                                 cancellationToken: cancellationToken);
         }
     }
     #endregion
@@ -144,7 +179,7 @@ string CombineParsedInfo(string country, string currency)
            $"Destination country: /{country}\r\n" +
            $"Currency: __{currency}__\r\n" +
            $"Exchange rate: {parser.GetExchangeRate()}\r\n" +
-           $"Transfer amount: {parser.GetReceivingAmount()} {parser.GetReceivingCurrency()}\r\n" +
+           $"Transfer amount: __{parser.GetReceivingAmount()}__ {parser.GetReceivingCurrency()}\r\n" +
            $"Total transfer amount: {parser.GetSendingAmount()} {parser.GetSendingCurrency()}\r\n";
 }
 
